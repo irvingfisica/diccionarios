@@ -1,4 +1,4 @@
-# Validador para PNDA
+# Herramienta de diccionarios para PNDA
 
 Este es una herramienta para configurar diccionarios en la PNDA. Funciona como aplicación independiente y es necesario instalarla. 
 
