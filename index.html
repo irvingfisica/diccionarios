@@ -17,7 +17,7 @@
           <div id="validacion"  class="mt-5">
             <h3>Validación</h3>
             <label for="apikey" class="form-label mt-2">Introduce tu APIkey:</label>
-            <input type="text" class="form-control" id="apikey">
+            <input type="password" class="form-control" id="apikey">
           </div>
           <div id="seleccion"  class="mt-5">
             <h3>Selección de recurso</h3>
@@ -30,6 +30,12 @@
         </div>
       </div>
     </div>
+    <div class="mt-2 text-muted" id="stata">
+      <p>
+        <span id="spinner" class="spinner-border spinner-border-sm d-none"></span>
+        <span><strong id="status"></strong></span>
+      </p>
+  </div>
     <div class="toast-container position-fixed top-0 end-0 p-3" id="toast-container"></div>
     <script type="module" src="/src/main.js" defer></script>
   </body>

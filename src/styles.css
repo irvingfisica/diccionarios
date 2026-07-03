@@ -226,3 +226,8 @@ span .Invalido {
     width: 8px;
 }
 
+#stata {
+    position: fixed;
+    bottom: 0;
+    margin-left: 2rem;
+}

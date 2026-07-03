@@ -10,7 +10,16 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 const { invoke } = window.__TAURI__.core;
 import { Toast } from 'bootstrap';
 
-let instituciones = await invoke("obtener_instituciones");
+let instituciones;
+try {
+  show_status("Cargando instituciones...");
+  instituciones = await invoke("obtener_instituciones");
+  hide_status();
+} catch (error) {
+  showToast(`No se pudo cargar las instituciones. Motivo: ${error}`,"danger");
+  hide_status();
+}
+
 
 window.appState = {
   grid: null,
@@ -48,8 +57,17 @@ const acjs = new autoComplete({
 });
 
 async function obtenerConjuntos(name,institucion) {
-    let conjuntos = await invoke("obtener_conjuntos",{institucion: name});
-
+    let conjuntos;
+    try {
+      show_status("Cargando conjuntos y recursos...");
+      conjuntos = await invoke("obtener_conjuntos",{institucion: name});
+      hide_status();
+    } catch (error) {
+      showToast(`No se pudo cargar los recursos. Motivo: ${error}`,"danger");
+      hide_status();
+      return
+    }
+    
     const recursos = d3.select("#recursos");
     recursos.selectAll("*").remove();
 
@@ -79,7 +97,18 @@ async function obtenerConjuntos(name,institucion) {
         .join("tr").append("td").html(p => p.name)
         .style("cursor","pointer")
         .on("click",async (e,p)  => {
-            let datos = await invoke("leer_base",{url:p.url});
+
+          let datos;
+          try {
+            show_status("Cargando base de datos (si la base es muy grande puede tardar)...");
+            datos = await invoke("leer_base",{url:p.url});
+            hide_status();
+          } catch (error) {
+            showToast(`No se pudo cargar la base de datos. Motivo: ${error}`,"danger");
+            hide_status();
+            return
+          }
+
             datos.recurso = p;
             datos.institucion = institucion;
             window.appState.datos = datos;
@@ -168,20 +197,58 @@ async function proceso(datos) {
         let fields = [];
 
         filas.each(function (col, fila) {
+
+          const tipo = d3.select("#tipo_" + fila).property("value");
+          const etiqueta = d3.select("#etiqueta_" + fila).property("value");
+          const descripcion = d3.select("#descripcion_" + fila).property("value");
+
+          if (!tipo || tipo == "") {
+            showToast(`La columna ${col} no tiene tipo asignado`,"warning");
+            return;
+          };
+
+          if (!etiqueta || etiqueta == "") {
+            showToast(`La columna ${col} no tiene etiqueta asignada`,"warning");
+            return;
+          };
+
+          if (!descripcion || descripcion == "") {
+            showToast(`La columna ${col} no tiene descripción asignada`,"warning");
+            return;
+          };
+
           let elemento = {info:{}};
           elemento["id"] = col;
-          elemento["type"] = d3.select("#tipo_" + fila).property("value");
-          elemento["info"]["label"] = d3.select("#etiqueta_" + fila).property("value");
-          elemento["info"]["notes"] = d3.select("#descripcion_" + fila).property("value");
-          elemento["info"]["type_override"] = d3.select("#tipo_" + fila).property("value");
+          elemento["type"] = tipo;
+          elemento["info"]["label"] = etiqueta;
+          elemento["info"]["notes"] = descripcion;
+          elemento["info"]["type_override"] = tipo;
           fields.push(elemento);
         });
+
+        if (fields.length == 0) {
+          showToast(`No hay ningun campo completo en el diccionario`,"danger");
+          return;
+        }
 
         let salida = {resource_id:datos.recurso.id,force:true, fields:fields};
 
         const api_key = d3.select("#apikey").property("value");
-        const respuesta = await invoke("enviar_datos",{apikey:api_key, datos:salida});
-        console.log(respuesta);
+
+        try {
+          show_status("Subiendo el diccionario a la PNDA...")
+          const respuesta = await invoke("enviar_datos",{apikey:api_key, datos:salida});
+          console.log(respuesta);
+          if (respuesta.success) {
+            showToast("Diccionario subido con éxito!","success");
+          }
+          hide_status();
+        } catch (error) {
+          hide_status();
+          showToast(`No se pudo subir el diccionario. Motivo: ${error}`,"danger");
+          return
+        }
+        
     })
 
 }
@@ -225,7 +292,7 @@ async function procesarDrop(event) {
           const rutaAbsoluta = event.payload.paths[0];
 
           if (!rutaAbsoluta.toLowerCase().endsWith('.csv')) {
-            utils.showToast("El archivo debe tener formato CSV.", "danger");
+            showToast("El archivo debe tener formato CSV.", "danger");
             return;
           };
 
@@ -253,6 +320,9 @@ async function procesarDrop(event) {
 
 function apoyo(diccionario) {
   console.log(diccionario);
+
+  d3.select("#copiar_todo").selectAll("*").remove();
+  d3.selectAll(".right").selectAll("*").remove();
 
   const cont0 = d3.select("#copiar_todo");
   cont0.append("p").html("Copia y edita la información para cada columna. Si el archivo de apoyo tiene el mismo orden que la base también puedes:")
@@ -414,4 +484,14 @@ export function showToast(message, type = "danger") {
   toast.show();
 
   toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove());
+}
+
+function show_status(message) {
+  d3.select("#spinner").classed("d-none", false);
+  d3.select("#status").html(message);
+}
+
+function hide_status() {
+  d3.select("#spinner").classed("d-none", true);
+  d3.select("#status").html("");
 }
