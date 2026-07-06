@@ -339,50 +339,77 @@ function apoyo(diccionario) {
         .data(diccionario)
         .join("option")
         .attr("value",(p,j) => j)
-        .property("selected",(p,j) => j == i)
-        .html(p => p.columna)
+        .property("selected",(p,j) => i < diccionario.length && j === i)
+        .html(p => p.columna);
+
+      d3.select(this).append("option").attr("value",-1).property("selected", i >= diccionario.length).html("sin correspondencia");
     });
 
   const dcol = right.append("div").attr("id",(d,i) => "dcol_" + i);
-  dcol.append("p").html((d,i) => "Etiqueta: <strong>" + diccionario[i]["etiqueta"]+ "</strong>");
-  dcol.append("p").html((d,i) => "Descripción: <strong>" + diccionario[i]["descripcion"]+ "</strong>");
+  dcol.append("p").html((d,i) => {
+    const dato = diccionario[i];
+    return dato 
+      ? "Etiqueta: <strong>" + dato["etiqueta"]+ "</strong>"
+      : "Etiqueta: <em>sin correspondencia</em>";
+  });
+  dcol.append("p").html((d,i) => {
+    const dato = diccionario[i];
+    return dato 
+      ? "Descripción: <strong>" + dato["descripcion"]+ "</strong>"
+      : "Descripción: <em>sin correspondencia</em>";
+  });
 
   const boton = right.append("button").attr("class","btn btn-outline-secondary btn-sm").attr("data-index",(d,i) => i).html("Copiar");
   boton.on("click",(e,d) => {
 
     const fila = e.currentTarget.dataset.index;
-    const indice = d3.select("#columna_apoyo_" + fila).property("value");
+    const indice = +d3.select("#columna_apoyo_" + fila).property("value");
 
-    const dato = diccionario[indice];
+    if (indice !== -1) {
 
-    d3.select("#etiqueta_" + fila)
-        .property("value", dato.etiqueta);
+        const dato = diccionario[indice];
 
-    d3.select("#descripcion_" + fila)
-        .property("value", dato.descripcion);
+        d3.select("#etiqueta_" + fila)
+            .property("value", dato.etiqueta);
 
+        d3.select("#descripcion_" + fila)
+            .property("value", dato.descripcion);
+    }
   })
 
   selecto.on("change",(e,d) => {
     const fila = e.currentTarget.dataset.index;
-    const indice = e.currentTarget.value;
+    const indice = +e.currentTarget.value;
 
     const dcol = d3.select("#dcol_" + fila);
     dcol.selectAll("p").remove("*");
-    dcol.append("p").html((d,i) => "Etiqueta: <strong>" + diccionario[indice]["etiqueta"]+ "</strong>");
-    dcol.append("p").html((d,i) => "Descripción: <strong>" + diccionario[indice]["descripcion"]+ "</strong>");
+    dcol.append("p").html((d,i) => {
+      const dato = diccionario[indice];
+      return dato 
+        ? "Etiqueta: <strong>" + dato["etiqueta"]+ "</strong>"
+        : "Etiqueta: <em>sin correspondencia</em>";
+    });
+    dcol.append("p").html((d,i) => {
+      const dato = diccionario[indice];
+      return dato 
+        ? "Descripción: <strong>" + dato["descripcion"]+ "</strong>"
+        : "Descripción: <em>sin correspondencia</em>";
+    });
   });
 
   bcpall.on("click",(e,d) => {
     d3.selectAll(".right select").each(function(_,fila) {
-      const indice = this.value;
-      const dato = diccionario[indice];
+      const indice = +this.value;
+    
+      if (indice !== -1) {
+        const dato = diccionario[indice];
 
-      d3.select("#etiqueta_" + fila)
-            .property("value", dato.etiqueta);
+        d3.select("#etiqueta_" + fila)
+              .property("value", dato.etiqueta);
 
-      d3.select("#descripcion_" + fila)
-          .property("value", dato.descripcion);
+        d3.select("#descripcion_" + fila)
+            .property("value", dato.descripcion);
+      }
     })
   })
 }
