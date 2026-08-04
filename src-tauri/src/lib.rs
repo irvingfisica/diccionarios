@@ -264,10 +264,38 @@ async fn leer_dicc(ruta: String, state: State<'_, ContenedorDatos>) -> Result<Ve
         .finish()
         .map_err(|e| e.to_string())?;
 
-    let columnas = df.select_at_idx(0).unwrap().str().map_err(|e| e.to_string())?;
-    let tipos = df.select_at_idx(1).unwrap().str().map_err(|e| e.to_string())?;
-    let etiquetas = df.select_at_idx(2).unwrap().str().map_err(|e| e.to_string())?;
-    let descripciones = df.select_at_idx(3).unwrap().str().map_err(|e| e.to_string())?;
+    let ncols = df.width();
+    
+    if ncols < 4 {
+        return Err(format!(
+            "El archivo CSV no tiene suficientes columnas. Se requieren 4, pero se encontraron {}.",
+            ncols
+        ));
+    }
+
+    let columnas = df
+        .select_at_idx(0)
+        .ok_or_else(|| "No se pudo obtener la columna 0".to_string())?
+        .str()
+        .map_err(|e| e.to_string())?;
+
+    let tipos = df
+        .select_at_idx(1)
+        .ok_or_else(|| "No se pudo obtener la columna 1".to_string())?
+        .str()
+        .map_err(|e| e.to_string())?;
+
+    let etiquetas = df
+        .select_at_idx(2)
+        .ok_or_else(|| "No se pudo obtener la columna 2".to_string())?
+        .str()
+        .map_err(|e| e.to_string())?;
+
+    let descripciones = df
+        .select_at_idx(3)
+        .ok_or_else(|| "No se pudo obtener la columna 3".to_string())?
+        .str()
+        .map_err(|e| e.to_string())?;
 
     let mut salida = Vec::with_capacity(df.height());
 
