@@ -297,11 +297,17 @@ async fn leer_dicc(ruta: String, state: State<'_, ContenedorDatos>) -> Result<Ve
         .str()
         .map_err(|e| e.to_string())?;
 
-    let mut salida = Vec::with_capacity(df.height());
+    let mut salida = Vec::new();
 
     for i in 0..df.height() {
+        // Excel suele exportar miles de filas vacías (",,,"); sin nombre de columna la fila no sirve.
+        let columna = match columnas.get(i).map(str::trim) {
+            Some(c) if !c.is_empty() => c.to_string(),
+            _ => continue,
+        };
+
         salida.push(DiccionarioFila {
-            columna: columnas.get(i).map(|s| s.to_string()),
+            columna: Some(columna),
             tipo: tipos.get(i).map(|s| s.to_string()),
             etiqueta: etiquetas.get(i).map(|s| s.to_string()),
             descripcion: descripciones.get(i).map(|s| s.to_string()),
@@ -316,20 +322,50 @@ async fn leer_dicc(ruta: String, state: State<'_, ContenedorDatos>) -> Result<Ve
     Ok(salida)
 }
 
-#[tauri::command]
-async fn leer_base(url: String, state: State<'_, ContenedorDatos>) -> Result<Reporte, String> {
-    let cliente = cliente_ckan()?;
+const FILAS_MUESTRA: usize = 25;
 
-    let bytes = cliente
-        .get(&url)
+// Descarga solo el encabezado y las primeras `filas` del CSV; al soltar la respuesta se corta la conexión.
+async fn descargar_muestra(cliente: &reqwest::Client, url: &str, filas: usize) -> Result<Vec<u8>, String> {
+    let mut respuesta = cliente
+        .get(url)
         .send()
         .await
         .map_err(|e| e.to_string())?
         .error_for_status()
-        .map_err(|e| e.to_string())?
-        .bytes()
-        .await
         .map_err(|e| e.to_string())?;
+
+    let mut bytes = Vec::new();
+    let mut saltos = 0;
+    let mut en_comillas = false;
+
+    while let Some(chunk) = respuesta.chunk().await.map_err(|e| e.to_string())? {
+        let inicio = bytes.len();
+        bytes.extend_from_slice(&chunk);
+
+        for i in inicio..bytes.len() {
+            match bytes[i] {
+                b'"' => en_comillas = !en_comillas,
+                b'\n' if !en_comillas => {
+                    saltos += 1;
+                    // encabezado + `filas` registros
+                    if saltos > filas {
+                        bytes.truncate(i + 1);
+                        return Ok(bytes);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(bytes)
+}
+
+#[tauri::command]
+async fn leer_base(url: String, state: State<'_, ContenedorDatos>) -> Result<Reporte, String> {
+    let cliente = cliente_ckan()?;
+
+    let bytes = descargar_muestra(&cliente, &url, FILAS_MUESTRA).await?;
 
     let mut header_cursor = Cursor::new(bytes.clone());
 

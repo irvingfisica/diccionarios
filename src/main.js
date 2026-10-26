@@ -6,6 +6,9 @@ import "@tarekraafat/autocomplete.js/dist/css/autoComplete.02.css";
 import autoComplete from "@tarekraafat/autocomplete.js";
 import * as d3 from 'd3';
 import { AllCommunityModule, ModuleRegistry, createGrid } from 'ag-grid-community';
+// CSS clásico sin anidamiento: el que AG Grid inyecta usa CSS nesting y se rompe en WebKit de macOS antiguos.
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-quartz.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const { invoke } = window.__TAURI__.core;
 import { Toast } from 'bootstrap';
@@ -470,6 +473,7 @@ export function conectarGridInfinito(columnas, totalFilas, esquema) {
 
     const gridOptions = {
         columnDefs: columnDefs,
+        theme: 'legacy',
         rowModelType: 'infinite',
         cacheBlockSize: 100,
         maxBlocksInCache: 10,
