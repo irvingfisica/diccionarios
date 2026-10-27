@@ -9,21 +9,21 @@ Todas las versiones serán detectadas como inseguras por el sistema operativo pu
 
 ### Windows:
 
-- [x64-nsis](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.2/diccionarios_0.1.0_x64-setup.exe)
+- [x64-nsis](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.4/diccionarios_0.1.4_x64-setup.exe)
 
-- [x64-msi](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.2/diccionarios_0.1.0_x64_en-US.msi)
+- [x64-msi](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.4/diccionarios_0.1.4_x64_en-US.msi)
 
 ### Mac:
 
-- [x64-dmg](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.2/diccionarios_0.1.0_x64.dmg)
+- [x64-dmg](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.4/diccionarios_0.1.4_x64.dmg)
 
 ### Linux:
 
-- [x86_64-rpm](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.3/diccionarios-0.1.3-1.x86_64.rpm)
+- [x86_64-rpm](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.4/diccionarios-0.1.4-1.x86_64.rpm)
 
-- [amd64-AppImage](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.3/diccionarios_0.1.3_amd64.AppImage)
+- [amd64-AppImage](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.4/diccionarios_0.1.4_amd64.AppImage)
 
-- [amd64-deb](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.3/diccionarios_0.1.3_amd64.deb)
+- [amd64-deb](https://github.com/irvingfisica/diccionarios/releases/download/v1.0.4/diccionarios_0.1.4_amd64.deb)
 
 
 ## Compilar por tu cuenta
