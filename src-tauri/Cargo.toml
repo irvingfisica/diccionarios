@@ -30,4 +30,6 @@ tokio = {version = "1", features = ["full"] }
 futures = "0.3"
 encoding_rs = "0.8"
 chardetng = "1"
+russh = { version = "0.61"}
+russh-sftp = "2.0"
 
