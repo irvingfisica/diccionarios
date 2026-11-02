@@ -1,7 +1,6 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import * as bootstrap from 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import "@tarekraafat/autocomplete.js/dist/css/autoComplete.02.css";
 import autoComplete from "@tarekraafat/autocomplete.js";
 import * as d3 from 'd3';
@@ -26,7 +25,11 @@ try {
 
 window.appState = {
   grid: null,
-  datos: null
+  datos: null,
+  server: null,
+  user: null,
+  institucion: null,
+  cargando: false,
 };
 
 const acjs = new autoComplete({
@@ -53,6 +56,7 @@ const acjs = new autoComplete({
                 const item = event.detail.selection.value;
                 acjs.input.value = item.display_name;
                 console.log(item);
+                window.appState.institucion = item;
                 obtenerConjuntos(item.name,item.display_name);
             },
         },
@@ -101,15 +105,41 @@ async function obtenerConjuntos(name,institucion) {
         .style("cursor","pointer")
         .on("click",async (e,p)  => {
 
+          // Una carga a la vez: si otra terminara después, dejaría en pantalla (y en el backend) un recurso distinto al seleccionado.
+          if (window.appState.cargando) {
+            showToast("Espera a que termine de cargar el recurso seleccionado.","warning");
+            return
+          }
+
+          if (window.appState.grid) {
+            window.appState.grid.destroy();
+            window.appState.grid = null;
+          }
+          d3.select("#diccionario").selectAll("*").remove();
+          window.appState.datos = null;
+          d3.selectAll("#recursos_acc td").classed("table-active", false);
+          d3.select(e.currentTarget).classed("table-active", true);
+
+          const servidor = window.appState.server = d3.select("#server").property("value").trim();
+          const usuario = window.appState.user = d3.select("#usuario").property("value").trim();
+
+          if (!servidor || !usuario) {
+            showToast("Los campos usuario y servidor son obligatorios.","danger");
+            return
+          }
+
           let datos;
+          window.appState.cargando = true;
           try {
             show_status("Cargando base de datos (si la base es muy grande puede tardar)...");
-            datos = await invoke("leer_base",{url:p.url});
+            datos = await invoke("leer_base",{url:p.url, host:servidor, usuario:usuario});
             hide_status();
           } catch (error) {
             showToast(`No se pudo cargar la base de datos. Motivo: ${error}`,"danger");
             hide_status();
             return
+          } finally {
+            window.appState.cargando = false;
           }
 
             datos.recurso = p;
@@ -125,8 +155,16 @@ const input = document.querySelector("#buscainst");
 
 input.addEventListener("focus", function () {this.value = "";});
 
+// Si se sale de la búsqueda sin elegir otra institución, se vuelve a mostrar la actual.
+input.addEventListener("blur", function () {
+    const actual = window.appState.institucion;
+    if (!this.value && actual) {
+        this.value = actual.display_name;
+    }
+});
+
 async function proceso(datos) {
-    const recursos = d3.select("#recursos");
+    const recursos = d3.select("#diccionario");
     recursos.selectAll("*").remove();
 
     const muestra = await invoke("obtener_bloque",{startRow: 0, pageSize: 10});
@@ -198,6 +236,7 @@ async function proceso(datos) {
         const filas = d3.selectAll(".fila");
 
         let fields = [];
+        let omitidas = [];
 
         filas.each(function (col, fila) {
 
@@ -205,18 +244,8 @@ async function proceso(datos) {
           const etiqueta = d3.select("#etiqueta_" + fila).property("value");
           const descripcion = d3.select("#descripcion_" + fila).property("value");
 
-          if (!tipo || tipo == "") {
-            showToast(`La columna ${col} no tiene tipo asignado`,"warning");
-            return;
-          };
-
-          if (!etiqueta || etiqueta == "") {
-            showToast(`La columna ${col} no tiene etiqueta asignada`,"warning");
-            return;
-          };
-
-          if (!descripcion || descripcion == "") {
-            showToast(`La columna ${col} no tiene descripción asignada`,"warning");
+          if (!tipo || !etiqueta || !descripcion) {
+            omitidas.push(col);
             return;
           };
 
@@ -234,6 +263,10 @@ async function proceso(datos) {
           return;
         }
 
+        if (omitidas.length > 0) {
+          showToast(`Se omitirán ${omitidas.length} columnas sin tipo, etiqueta o descripción: ${omitidas.join(", ")}`,"warning");
+        }
+
         let salida = {resource_id:datos.recurso.id,force:true, fields:fields};
 
         const api_key = d3.select("#apikey").property("value");
@@ -243,8 +276,7 @@ async function proceso(datos) {
           const respuesta = await invoke("enviar_datos",{apikey:api_key, datos:salida});
           console.log(respuesta);
           if (respuesta.success) {
-            showToast("Diccionario subido con éxito!","success");
-          }
+            showToast(`Diccionario subido con éxito al recurso "${datos.recurso.name}"`,"success");          }
           hide_status();
         } catch (error) {
           hide_status();
@@ -299,7 +331,14 @@ async function procesarDrop(event) {
             return;
           };
 
+          const datosActuales = window.appState.datos;
           const diccionario = await invoke("leer_dicc", { ruta: rutaAbsoluta });
+
+          // Si se cambió de recurso mientras se leía el archivo, no se copia al formulario del nuevo.
+          if (window.appState.datos !== datosActuales) {
+            return;
+          }
+
           apoyo(diccionario);
         
           const nombre = rutaAbsoluta.replace(/^.*[\\/]/, "");

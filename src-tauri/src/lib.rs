@@ -11,6 +11,8 @@ use polars::prelude::*;
 use serde_json::Value;
 use std::fs::File;
 use chardetng::{EncodingDetector,Iso2022JpDetection, Utf8Detection};
+use tokio::io::AsyncReadExt;
+use russh_sftp::client::SftpSession;
 
 fn cliente_ckan() -> Result<reqwest::Client, String> {
     let mut headers = HeaderMap::new();
@@ -324,23 +326,26 @@ async fn leer_dicc(ruta: String, state: State<'_, ContenedorDatos>) -> Result<Ve
 
 const FILAS_MUESTRA: usize = 25;
 
-// Descarga solo el encabezado y las primeras `filas` del CSV; al soltar la respuesta se corta la conexión.
-async fn descargar_muestra(cliente: &reqwest::Client, url: &str, filas: usize) -> Result<Vec<u8>, String> {
-    let mut respuesta = cliente
-        .get(url)
-        .send()
+// Lee solo el encabezado y las primeras `filas` del CSV; el resto del archivo no se transfiere.
+async fn descargar_muestra(repo: &RepoConexion, ruta_remota: &str, filas: usize) -> Result<Vec<u8>, String> {
+    let mut archivo = repo.sftp
+        .open(ruta_remota)
         .await
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Error abriendo archivo remoto {ruta_remota}: {:?}", e))?;
 
     let mut bytes = Vec::new();
     let mut saltos = 0;
     let mut en_comillas = false;
+    let mut chunk = vec![0u8; 64 * 1024];
 
-    while let Some(chunk) = respuesta.chunk().await.map_err(|e| e.to_string())? {
+    loop {
+        let leidos = archivo.read(&mut chunk).await.map_err(|e| e.to_string())?;
+        if leidos == 0 {
+            break;
+        }
+
         let inicio = bytes.len();
-        bytes.extend_from_slice(&chunk);
+        bytes.extend_from_slice(&chunk[..leidos]);
 
         for i in inicio..bytes.len() {
             match bytes[i] {
@@ -362,10 +367,13 @@ async fn descargar_muestra(cliente: &reqwest::Client, url: &str, filas: usize) -
 }
 
 #[tauri::command]
-async fn leer_base(url: String, state: State<'_, ContenedorDatos>) -> Result<Reporte, String> {
-    let cliente = cliente_ckan()?;
+async fn leer_base(url: String, host: String, usuario: String, state: State<'_, ContenedorDatos>) -> Result<Reporte, String> {
+    let ruta_remota = ruta_privada(&url)?;
 
-    let bytes = descargar_muestra(&cliente, &url, FILAS_MUESTRA).await?;
+    let repo = conectar_repo(&host, &usuario).await.map_err(|e|format!("No se pudo conectar al repo {e}"))?;
+    let descarga = descargar_muestra(&repo, &ruta_remota, FILAS_MUESTRA).await;
+    destruir(repo).await;
+    let bytes = descarga?;
 
     let mut header_cursor = Cursor::new(bytes.clone());
 
@@ -697,4 +705,90 @@ async fn obtener_bloque(start_row: i64, page_size: i64,state: State<'_, Contened
     let rows: Value = serde_json::from_slice(&buf).map_err(|e| format!("Error al estructurar el JSON: {}", e))?;
 
     Ok(rows)
+}
+
+pub struct RepoConexion {
+    ssh: russh::client::Handle<ClientHandler>,
+    sftp: SftpSession
+}
+
+struct ClientHandler;
+
+impl russh::client::Handler for ClientHandler {
+    type Error = russh::Error;
+
+    async fn check_server_key(
+        &mut self,
+        _server_public_key: &russh::keys::ssh_key::PublicKey,
+    ) -> Result<bool, Self::Error>
+    {
+        Ok(true)
+    }
+}
+
+async fn destruir(repo: RepoConexion) {
+
+    if let Err(e) = repo.sftp.close().await {
+        eprintln!("Error cerrando SFTP: {e}");
+    }
+
+    if let Err(e) = repo.ssh
+        .disconnect(
+            russh::Disconnect::ByApplication,
+            "Operación completada",
+            "es-MX",
+        )
+        .await
+    {
+        eprintln!("Error cerrando SSH: {e}");
+    }
+}
+
+fn ruta_privada(url: &str) -> Result<String, String> {
+    url.strip_prefix("https://repodatos.atdt.gob.mx/")
+        .map(|resto| "/mnt/nfs/datasets/".to_string() + resto)
+        .ok_or(format!("El recurso no está en el repositorio de datos: {url}"))
+}
+
+async fn conectar_repo(host: &str, usuario: &str) -> Result<RepoConexion, String> {
+    let config = Arc::new(russh::client::Config::default());
+    let mut ssh = russh::client::connect(config, host, ClientHandler)
+        .await
+        .map_err(|e| format!("Error de conexión SSH: {:?}", e))?;
+
+    let home = dirs::home_dir().ok_or("No hay HOME")?;
+    let llave_path = home.join(".ssh").join("id_ed25519");
+
+    if !llave_path.exists() {
+        return Err("No se encontró la llave SSH válida".to_string());
+    };
+
+    let key_pair = russh::keys::load_secret_key(llave_path, None)
+        .map_err(|e| format!("Error al leer/parsear la llave privada: {:?}", e))?;
+
+    let key_with_alg = russh::keys::key::PrivateKeyWithHashAlg::new(Arc::new(key_pair), None);
+
+    let autenticado = ssh
+        .authenticate_publickey(usuario, key_with_alg.into())
+        .await
+        .map_err(|e| format!("Error en el handshake de autenticación: {:?}", e))?;
+
+    if !autenticado.success() {
+        return Err("La autenticación por llave pública fue rechazada por el servidor".to_string());
+    }
+
+    let canal_sftp = ssh.channel_open_session().await.map_err(|e| format!("No se pudo abrir la sesión: {:?}", e))?;
+
+    canal_sftp.request_subsystem(true, "sftp").await
+    .map_err(|e| format!("Error iniciando subsistema SFTP: {:?}", e))?;
+
+    let sftp = SftpSession::new(
+        canal_sftp.into_stream(),
+    )
+    .await
+    .map_err(|e| format!("Error creando sesión SFTP: {:?}", e))?;
+
+    let conexion = RepoConexion {ssh,sftp};
+
+    Ok(conexion)
 }

@@ -12,6 +12,11 @@ h1 {
 
 }
 
+#recursos_acc {
+    max-height: 45vh;
+    overflow-y: auto;
+}
+
 .drop-zone {
     width: 100%;
     aspect-ratio: 20 / 5;
